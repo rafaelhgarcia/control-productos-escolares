@@ -21,40 +21,68 @@ def initialize_database():
     """
     with app.app_context():
         print("--- Iniciando Configuración de Base de Datos ---")
+
+try:
+        db.create_all()
+        print("Tablas creadas/verificadas exitosamente (db.create_all()).")
+    except Exception as e:
+        print(f"ERROR CRÍTICO: Fallo al crear tablas. Verifica la conexión a DB. Error: {e}")
+        return
+
+    admin_user = User.query.filter_by(username=ADMIN_USERNAME).first()
+
+    if not admin_user:
+        password_hash = generate_password_hash(ADMIN_PASSWORD)
+        
+        new_admin = User(
+            username=ADMIN_USERNAME,
+            email='admin@control-escolar.com', 
+            password_hash=password_hash,
+            is_admin=True 
+        )
+        
+        db.session.add(new_admin)
+        db.session.commit()
+        print(f"Usuario '{ADMIN_USERNAME}' creado.")
+        print(f"¡IMPORTANTE! Contraseña de inicio de sesión: {ADMIN_PASSWORD}")
+    else:
+        print(f"Usuario '{ADMIN_USERNAME}' ya existe. No se creó uno nuevo.")
+        
+    print("--- Configuración de Base de Datos Terminada ---")
         
         # 1. Crear todas las tablas
         # Esto le dice a SQLAlchemy que cree las tablas definidas en todos los modelos (User, Producto, etc.)
-        try:
-            db.create_all()
-            print("Tablas creadas exitosamente (db.create_all()).")
-        except Exception as e:
-            print(f"Error al crear tablas: {e}")
+        #try:
+         #   db.create_all()
+        #    print("Tablas creadas exitosamente (db.create_all()).")
+       # except Exception as e:
+         #   print(f"Error al crear tablas: {e}")
             # Si esto falla, verifica la variable de entorno DATABASE_URL en Render.
 
         # 2. Verificar y crear el usuario administrador si no existe
-        admin_user = User.query.filter_by(username=ADMIN_USERNAME).first()
+       # admin_user = User.query.filter_by(username=ADMIN_USERNAME).first()
 
-        if not admin_user:
+       # if not admin_user:
             # Genera el hash de la contraseña. 
             # ASEGÚRATE de que el 'method' (default: 'pbkdf2:sha256') coincida con el que usa tu app.py si es diferente.
-            password_hash = generate_password_hash(ADMIN_PASSWORD)
+          #  password_hash = generate_password_hash(ADMIN_PASSWORD)
             
-            new_admin = User(
-                username=ADMIN_USERNAME,
+           # new_admin = User(
+            #    username=ADMIN_USERNAME,
                 # Email o cualquier otro campo requerido por tu modelo User
-                email='admin@control-escolar.com', 
-                password_hash=password_hash,
-                is_admin=True # Asegúrate de que tu modelo User tiene este campo
-            )
+             #   email='admin@control-escolar.com', 
+              #  password_hash=password_hash,
+               # is_admin=True # Asegúrate de que tu modelo User tiene este campo
+          #  )
             
-            db.session.add(new_admin)
-            db.session.commit()
-            print(f"Usuario '{ADMIN_USERNAME}' creado.")
-            print(f"¡IMPORTANTE! Usa la contraseña: {ADMIN_PASSWORD}")
-        else:
-            print(f"Usuario '{ADMIN_USERNAME}' ya existe. No se creó uno nuevo.")
+          #  db.session.add(new_admin)
+          #  db.session.commit()
+          #  print(f"Usuario '{ADMIN_USERNAME}' creado.")
+          #  print(f"¡IMPORTANTE! Usa la contraseña: {ADMIN_PASSWORD}")
+       # else:
+         #   print(f"Usuario '{ADMIN_USERNAME}' ya existe. No se creó uno nuevo.")
             
-        print("--- Configuración de Base de Datos Terminada ---")
+       # print("--- Configuración de Base de Datos Terminada ---")#
 
 if __name__ == '__main__':
     initialize_database()

@@ -3,7 +3,7 @@ import os
 # Asegúrate de que estos están disponibles para ser importados desde app.py
 from app import app, db, User 
 from werkzeug.security import generate_password_hash
-from dotenv import load_dotenv # Si usas variables de entorno localmente, aunque en Render usa su propio sistema
+#from dotenv import load_dotenv # Si usas variables de entorno localmente, aunque en Render usa su propio sistema
 
 # Configuración de Contraseña de Administrador
 # ----------------------------------------------------

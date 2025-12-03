@@ -8,7 +8,7 @@ import io
 import base64
 import os
 import smtplib
-from email.mime.text import MimeText
+from email.mime.text import MIMEText #from email.mime.text import MimeText
 from email.mime.multipart import MimeMultipart
 
 app = Flask(__name__)

@@ -22,7 +22,7 @@ def initialize_database():
     with app.app_context():
         print("--- Iniciando Configuración de Base de Datos ---")
 
-try:
+    try:
         db.create_all()
         print("Tablas creadas/verificadas exitosamente (db.create_all()).")
     except Exception as e:

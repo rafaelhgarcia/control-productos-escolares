@@ -12,8 +12,17 @@ from email.mime.text import MimeText
 from email.mime.multipart import MimeMultipart
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = 'tu-clave-secreta-aqui'
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///control_productos.db'
+# Configuración para producción (nube) o desarrollo (local)
+app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'tu-clave-secreta-aqui-cambiar-en-produccion')
+# Usar PostgreSQL en producción (Render/Railway) o SQLite en desarrollo
+database_url = os.environ.get('DATABASE_URL')
+if database_url:
+    # Render y Railway proporcionan DATABASE_URL con postgres://, necesitamos cambiarlo a postgresql://
+    if database_url.startswith('postgres://'):
+        database_url = database_url.replace('postgres://', 'postgresql://', 1)
+    app.config['SQLALCHEMY_DATABASE_URI'] = database_url
+else:
+    app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///control_productos.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 # ConfiguraciÃ³n de email
@@ -680,4 +689,8 @@ if __name__ == '__main__':
             db.session.add(admin)
             db.session.commit()
     
-    app.run(debug=True)
+    # En producción, gunicorn maneja el servidor
+    # En desarrollo local, usar el servidor de Flask
+    port = int(os.environ.get('PORT', 5000))
+    debug = os.environ.get('FLASK_ENV') != 'production'
+    app.run(host='0.0.0.0', port=port, debug=debug)

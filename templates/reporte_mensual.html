@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
@@ -23,7 +23,7 @@
                     <i class="fas fa-tachometer-alt"></i> Dashboard
                 </a>
                 <a class="nav-link" href="/logout">
-                    <i class="fas fa-sign-out-alt"></i> Cerrar SesiÃ³n
+                    <i class="fas fa-sign-out-alt"></i> Cerrar Sesión
                 </a>
             </div>
         </div>
@@ -50,7 +50,7 @@
             <div class="col-12">
                 <div class="card">
                     <div class="card-header">
-                        <h5>PerÃ­odo: {{ inicio_mes.strftime('%B %Y') }}</h5>
+                        <h5>Período: {{ inicio_mes.strftime('%B %Y') }}</h5>
                     </div>
                     <div class="card-body">
                         {% if pedidos %}
@@ -139,7 +139,7 @@
                             <div class="col-md-4">
                                 <div class="card bg-light">
                                     <div class="card-body">
-                                        <h6>EstadÃ­sticas Generales</h6>
+                                        <h6>Estadísticas Generales</h6>
                                         <p class="mb-1"><strong>Total de pedidos:</strong> {{ pedidos|length }}</p>
                                         <p class="mb-1"><strong>Escuelas activas:</strong> {{ escuelas_dict|length }}</p>
                                         <p class="mb-1"><strong>Supervisores activos:</strong> {{ supervisores_dict|length }}</p>
@@ -153,7 +153,7 @@
                         <div class="alert alert-info text-center">
                             <i class="fas fa-info-circle fa-2x mb-3"></i>
                             <h4>No hay pedidos en este mes</h4>
-                            <p>No se han realizado pedidos durante el perÃ­odo seleccionado.</p>
+                            <p>No se han realizado pedidos durante el período seleccionado.</p>
                         </div>
                         {% endif %}
                     </div>

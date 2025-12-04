@@ -1,4 +1,4 @@
-﻿from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, send_file
+from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, send_file
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -8,29 +8,34 @@ import io
 import base64
 import os
 import smtplib
-from email.mime.text import MIMEText #from email.mime.text import MimeText
-from email.mime.multipart import MIMEMultipart # from email.mime.multipart import MimeMultipart
+# CORRECCIÓN DE IMPORTACIONES DE EMAIL
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 
 app = Flask(__name__)
 # Configuración para producción (nube) o desarrollo (local)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'tu-clave-secreta-aqui-cambiar-en-produccion')
 # Usar PostgreSQL en producción (Render/Railway) o SQLite en desarrollo
 database_url = os.environ.get('DATABASE_URL')
+
+# Manejo robusto de la URL de PostgreSQL
 if database_url:
     # Render y Railway proporcionan DATABASE_URL con postgres://, necesitamos cambiarlo a postgresql://
     if database_url.startswith('postgres://'):
         database_url = database_url.replace('postgres://', 'postgresql://', 1)
     app.config['SQLALCHEMY_DATABASE_URI'] = database_url
 else:
+    # Usar SQLite para desarrollo local por defecto
     app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///control_productos.db'
+    
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
-# ConfiguraciÃ³n de email
+# Configuración de email
 app.config['MAIL_SERVER'] = 'smtp.gmail.com'
 app.config['MAIL_PORT'] = 587
 app.config['MAIL_USE_TLS'] = True
-app.config['MAIL_USERNAME'] = 'tu-email@gmail.com'  # Cambiar por tu email
-app.config['MAIL_PASSWORD'] = 'tu-password'  # Cambiar por tu contraseÃ±a
+app.config['MAIL_USERNAME'] = os.environ.get('MAIL_USERNAME', 'tu-email@gmail.com') # Usar variable de entorno
+app.config['MAIL_PASSWORD'] = os.environ.get('MAIL_PASSWORD', 'tu-password') # Usar variable de entorno
 
 db = SQLAlchemy(app)
 login_manager = LoginManager()
@@ -42,9 +47,13 @@ class User(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80), unique=True, nullable=False)
     email = db.Column(db.String(120), unique=True, nullable=False)
-    password_hash = db.Column(db.String(120), nullable=False)
+    password_hash = db.Column(db.String(256), nullable=False) # Aumentado a 256 para mayor seguridad
     is_admin = db.Column(db.Boolean, default=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def check_password(self, password):
+        return check_password_hash(self.password_hash, password)
+
 
 class Bodega(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -97,9 +106,9 @@ class DetallePedido(db.Model):
 
 @login_manager.user_loader
 def load_user(user_id):
-    return User.query.get(int(user_id))
+    return db.session.get(User, int(user_id))
 
-# FunciÃ³n para generar cÃ³digo QR
+# Función para generar código QR
 def generate_qr_code(data, size=10, border=4):
     qr = qrcode.QRCode(
         version=1,
@@ -120,15 +129,17 @@ def generate_qr_code(data, size=10, border=4):
     
     return f"data:image/png;base64,{img_base64}"
 
-# FunciÃ³n para enviar email
+# Función para enviar email
 def send_email(to_email, subject, body):
     try:
-        msg = MimeMultipart()
+        # Uso de la clase corregida: MIMEMultipart
+        msg = MIMEMultipart() 
         msg['From'] = app.config['MAIL_USERNAME']
         msg['To'] = to_email
         msg['Subject'] = subject
         
-        msg.attach(MimeText(body, 'html'))
+        # Uso de la clase corregida: MIMEText
+        msg.attach(MIMEText(body, 'html'))
         
         server = smtplib.SMTP(app.config['MAIL_SERVER'], app.config['MAIL_PORT'])
         server.starttls()
@@ -141,7 +152,7 @@ def send_email(to_email, subject, body):
         print(f"Error enviando email: {e}")
         return False
 
-# FunciÃ³n para verificar stock bajo
+# Función para verificar stock bajo
 def check_low_stock():
     productos_bajo_stock = Producto.query.filter(Producto.cantidad < 11).all()
     if productos_bajo_stock:
@@ -162,10 +173,20 @@ def check_low_stock():
 # Rutas principales
 @app.route('/')
 def index():
+    # Si se usa SQLite, crear db.create_all() aquí para desarrollo local
+    if 'sqlite' in app.config['SQLALCHEMY_DATABASE_URI'] and os.environ.get('FLASK_ENV') != 'production':
+        with app.app_context():
+            db.create_all()
+
+    if current_user.is_authenticated:
+        return redirect(url_for('dashboard'))
     return render_template('index.html')
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
+    if current_user.is_authenticated:
+        return redirect(url_for('dashboard'))
+    
     if request.method == 'POST':
         username = request.form['username']
         password = request.form['password']
@@ -175,7 +196,7 @@ def login():
             login_user(user)
             return redirect(url_for('dashboard'))
         else:
-            flash('Usuario o contraseÃ±a incorrectos')
+            flash('Usuario o contraseña incorrectos')
     
     return render_template('login.html')
 
@@ -192,7 +213,7 @@ def dashboard():
         flash('No tienes permisos de administrador')
         return redirect(url_for('index'))
     
-    # EstadÃ­sticas para el dashboard
+    # Estadísticas para el dashboard
     total_bodegas = Bodega.query.count()
     total_productos = Producto.query.count()
     total_supervisores = Supervisor.query.count()
@@ -200,11 +221,11 @@ def dashboard():
     total_pedidos = Pedido.query.count()
     
     return render_template('dashboard.html', 
-                         total_bodegas=total_bodegas,
-                         total_productos=total_productos,
-                         total_supervisores=total_supervisores,
-                         total_escuelas=total_escuelas,
-                         total_pedidos=total_pedidos)
+                          total_bodegas=total_bodegas,
+                          total_productos=total_productos,
+                          total_supervisores=total_supervisores,
+                          total_escuelas=total_escuelas,
+                          total_pedidos=total_pedidos)
 
 # Rutas para Bodegas
 @app.route('/bodegas')
@@ -243,7 +264,7 @@ def editar_bodega(id):
         flash('No tienes permisos de administrador')
         return redirect(url_for('index'))
     
-    bodega = Bodega.query.get_or_404(id)
+    bodega = db.session.get(Bodega, id) or Bodega.query.get_or_404(id) # Cambio a db.session.get para SQLAlchemy 3
     
     if request.method == 'POST':
         bodega.nombre = request.form['nombre']
@@ -261,7 +282,7 @@ def eliminar_bodega(id):
         flash('No tienes permisos de administrador')
         return redirect(url_for('index'))
     
-    bodega = Bodega.query.get_or_404(id)
+    bodega = db.session.get(Bodega, id) or Bodega.query.get_or_404(id)
     db.session.delete(bodega)
     db.session.commit()
     flash('Bodega eliminada exitosamente')
@@ -292,11 +313,11 @@ def crear_producto():
         bodega_id = int(request.form['bodega_id'])
         
         producto = Producto(nombre=nombre, descripcion=descripcion, 
-                          cantidad=cantidad, bodega_id=bodega_id)
+                            cantidad=cantidad, bodega_id=bodega_id)
         db.session.add(producto)
         db.session.commit()
         
-        # Verificar stock bajo despuÃ©s de crear producto
+        # Verificar stock bajo después de crear producto
         check_low_stock()
         
         flash('Producto creado exitosamente')
@@ -312,7 +333,7 @@ def editar_producto(id):
         flash('No tienes permisos de administrador')
         return redirect(url_for('index'))
     
-    producto = Producto.query.get_or_404(id)
+    producto = db.session.get(Producto, id) or Producto.query.get_or_404(id)
     
     if request.method == 'POST':
         producto.nombre = request.form['nombre']
@@ -321,7 +342,7 @@ def editar_producto(id):
         producto.bodega_id = int(request.form['bodega_id'])
         db.session.commit()
         
-        # Verificar stock bajo despuÃ©s de editar producto
+        # Verificar stock bajo después de editar producto
         check_low_stock()
         
         flash('Producto actualizado exitosamente')
@@ -337,7 +358,7 @@ def eliminar_producto(id):
         flash('No tienes permisos de administrador')
         return redirect(url_for('index'))
     
-    producto = Producto.query.get_or_404(id)
+    producto = db.session.get(Producto, id) or Producto.query.get_or_404(id)
     db.session.delete(producto)
     db.session.commit()
     flash('Producto eliminado exitosamente')
@@ -366,11 +387,11 @@ def crear_supervisor():
         apellido = request.form['apellido']
         email = request.form['email']
         
-        # Generar cÃ³digo QR Ãºnico
+        # Generar código QR único
         qr_code = f"SUP_{datetime.now().strftime('%Y%m%d%H%M%S')}"
         
         supervisor = Supervisor(nombre=nombre, apellido=apellido, 
-                              email=email, qr_code=qr_code)
+                                email=email, qr_code=qr_code)
         db.session.add(supervisor)
         db.session.commit()
         flash('Supervisor creado exitosamente')
@@ -385,7 +406,7 @@ def editar_supervisor(id):
         flash('No tienes permisos de administrador')
         return redirect(url_for('index'))
     
-    supervisor = Supervisor.query.get_or_404(id)
+    supervisor = db.session.get(Supervisor, id) or Supervisor.query.get_or_404(id)
     
     if request.method == 'POST':
         supervisor.nombre = request.form['nombre']
@@ -404,7 +425,7 @@ def eliminar_supervisor(id):
         flash('No tienes permisos de administrador')
         return redirect(url_for('index'))
     
-    supervisor = Supervisor.query.get_or_404(id)
+    supervisor = db.session.get(Supervisor, id) or Supervisor.query.get_or_404(id)
     db.session.delete(supervisor)
     db.session.commit()
     flash('Supervisor eliminado exitosamente')
@@ -433,11 +454,11 @@ def crear_escuela():
         direccion = request.form['direccion']
         supervisor_id = int(request.form['supervisor_id']) if request.form['supervisor_id'] else None
         
-        # Generar cÃ³digo QR Ãºnico
+        # Generar código QR único
         qr_code = f"ESC_{datetime.now().strftime('%Y%m%d%H%M%S')}"
         
         escuela = Escuela(nombre=nombre, direccion=direccion, 
-                         supervisor_id=supervisor_id, qr_code=qr_code)
+                          supervisor_id=supervisor_id, qr_code=qr_code)
         db.session.add(escuela)
         db.session.commit()
         flash('Escuela creada exitosamente')
@@ -453,7 +474,7 @@ def editar_escuela(id):
         flash('No tienes permisos de administrador')
         return redirect(url_for('index'))
     
-    escuela = Escuela.query.get_or_404(id)
+    escuela = db.session.get(Escuela, id) or Escuela.query.get_or_404(id)
     
     if request.method == 'POST':
         escuela.nombre = request.form['nombre']
@@ -473,13 +494,13 @@ def eliminar_escuela(id):
         flash('No tienes permisos de administrador')
         return redirect(url_for('index'))
     
-    escuela = Escuela.query.get_or_404(id)
+    escuela = db.session.get(Escuela, id) or Escuela.query.get_or_404(id)
     db.session.delete(escuela)
     db.session.commit()
     flash('Escuela eliminada exitosamente')
     return redirect(url_for('escuelas'))
 
-# Rutas para cÃ³digos QR
+# Rutas para códigos QR
 @app.route('/qr/supervisor/<int:id>')
 @login_required
 def qr_supervisor(id):
@@ -487,7 +508,7 @@ def qr_supervisor(id):
         flash('No tienes permisos de administrador')
         return redirect(url_for('index'))
     
-    supervisor = Supervisor.query.get_or_404(id)
+    supervisor = db.session.get(Supervisor, id) or Supervisor.query.get_or_404(id)
     
     # Crear URL para el supervisor
     qr_data = f"supervisor_login:{supervisor.qr_code}"
@@ -502,7 +523,7 @@ def qr_escuela(id):
         flash('No tienes permisos de administrador')
         return redirect(url_for('index'))
     
-    escuela = Escuela.query.get_or_404(id)
+    escuela = db.session.get(Escuela, id) or Escuela.query.get_or_404(id)
     
     # Crear URL para la escuela
     qr_data = f"escuela_pedidos:{escuela.qr_code}"
@@ -510,20 +531,22 @@ def qr_escuela(id):
     
     return render_template('qr_escuela.html', escuela=escuela, qr_image=qr_image)
 
-# Rutas para sistema de pedidos (SIN AUTENTICACIÃ“N)
+# Rutas para sistema de pedidos (SIN AUTENTICACIÓN)
 @app.route('/pedidos/escuela/<string:qr_code>')
 def pedidos_escuela(qr_code):
-    # Buscar escuela por cÃ³digo QR
+    # Buscar escuela por código QR
     escuela = Escuela.query.filter_by(qr_code=qr_code).first()
     if not escuela:
-        flash('CÃ³digo QR invÃ¡lido')
+        flash('Código QR inválido')
         return redirect(url_for('index'))
     
     # Obtener productos disponibles
     productos = Producto.query.filter(Producto.cantidad > 0).all()
     
-    # Verificar si la escuela puede hacer pedidos (mÃ¡ximo 2 por semana)
-    inicio_semana = datetime.now() - timedelta(days=datetime.now().weekday())
+    # Verificar si la escuela puede hacer pedidos (máximo 2 por semana)
+    inicio_semana = datetime.now().date() - timedelta(days=datetime.now().weekday())
+    
+    # Contar pedidos en la semana actual (usando solo la fecha para la comparación)
     pedidos_semana = Pedido.query.filter(
         Pedido.escuela_id == escuela.id,
         Pedido.fecha >= inicio_semana
@@ -532,10 +555,10 @@ def pedidos_escuela(qr_code):
     puede_pedir = pedidos_semana < 2
     
     return render_template('pedidos_escuela.html', 
-                         escuela=escuela, 
-                         productos=productos, 
-                         puede_pedir=puede_pedir,
-                         pedidos_semana=pedidos_semana)
+                          escuela=escuela, 
+                          productos=productos, 
+                          puede_pedir=puede_pedir,
+                          pedidos_semana=pedidos_semana)
 
 @app.route('/pedidos/crear', methods=['POST'])
 def crear_pedido():
@@ -546,18 +569,18 @@ def crear_pedido():
     # Buscar escuela
     escuela = Escuela.query.filter_by(qr_code=qr_code).first()
     if not escuela:
-        flash('CÃ³digo QR invÃ¡lido')
+        flash('Código QR inválido')
         return redirect(url_for('index'))
     
-    # Verificar lÃ­mite de pedidos por semana
-    inicio_semana = datetime.now() - timedelta(days=datetime.now().weekday())
+    # Verificar límite de pedidos por semana
+    inicio_semana = datetime.now().date() - timedelta(days=datetime.now().weekday())
     pedidos_semana = Pedido.query.filter(
         Pedido.escuela_id == escuela.id,
         Pedido.fecha >= inicio_semana
     ).count()
     
     if pedidos_semana >= 2:
-        flash('Esta escuela ya ha realizado el mÃ¡ximo de 2 pedidos esta semana')
+        flash('Esta escuela ya ha realizado el máximo de 2 pedidos esta semana')
         return redirect(url_for('pedidos_escuela', qr_code=qr_code))
     
     # Crear pedido
@@ -571,48 +594,57 @@ def crear_pedido():
     
     # Procesar productos del pedido
     total_productos = 0
+    productos_en_pedido = False
+    
     for key, value in request.form.items():
-        if key.startswith('producto_') and value:
-            producto_id = int(key.split('_')[1])
+        if key.startswith('producto_') and value.isdigit():
             cantidad = int(value)
             
-            # Verificar que no exceda 3 cajas por producto
-            if cantidad > 3:
-                flash(f'No se puede pedir mÃ¡s de 3 cajas del producto {producto_id}')
-                db.session.rollback()
-                return redirect(url_for('pedidos_escuela', qr_code=qr_code))
-            
-            # Verificar stock disponible
-            producto = Producto.query.get(producto_id)
-            if producto.cantidad < cantidad:
-                flash(f'No hay suficiente stock del producto {producto.nombre}')
-                db.session.rollback()
-                return redirect(url_for('pedidos_escuela', qr_code=qr_code))
-            
-            # Crear detalle del pedido
-            detalle = DetallePedido(
-                pedido_id=pedido.id,
-                producto_id=producto_id,
-                cantidad=cantidad
-            )
-            db.session.add(detalle)
-            total_productos += cantidad
+            if cantidad > 0:
+                productos_en_pedido = True
+                producto_id = int(key.split('_')[1])
+                
+                # Verificar que no exceda 3 cajas por producto
+                if cantidad > 3:
+                    flash(f'No se puede pedir más de 3 cajas del producto {producto_id}')
+                    db.session.rollback()
+                    return redirect(url_for('pedidos_escuela', qr_code=qr_code))
+                
+                # Verificar stock disponible
+                producto = db.session.get(Producto, producto_id)
+                if not producto or producto.cantidad < cantidad:
+                    flash(f'No hay suficiente stock del producto {producto.nombre if producto else producto_id}')
+                    db.session.rollback()
+                    return redirect(url_for('pedidos_escuela', qr_code=qr_code))
+                
+                # Crear detalle del pedido
+                detalle = DetallePedido(
+                    pedido_id=pedido.id,
+                    producto_id=producto_id,
+                    cantidad=cantidad
+                )
+                db.session.add(detalle)
+                total_productos += cantidad
     
-    if total_productos == 0:
+    if not productos_en_pedido:
         flash('Debe seleccionar al menos un producto')
         db.session.rollback()
         return redirect(url_for('pedidos_escuela', qr_code=qr_code))
     
     # Actualizar stock de productos
-    for detalle in pedido.detalles:
-        producto = Producto.query.get(detalle.producto_id)
-        producto.cantidad -= detalle.cantidad
-        if producto.cantidad < 0:
-            producto.cantidad = 0
+    # Usamos db.session.get(Pedido, pedido.id) para asegurar que la relación 'detalles' esté cargada
+    current_pedido = db.session.get(Pedido, pedido.id)
+    if current_pedido:
+        for detalle in current_pedido.detalles:
+            producto = db.session.get(Producto, detalle.producto_id)
+            if producto:
+                producto.cantidad -= detalle.cantidad
+                if producto.cantidad < 0:
+                    producto.cantidad = 0
     
     db.session.commit()
     
-    # Verificar stock bajo despuÃ©s del pedido
+    # Verificar stock bajo después del pedido
     check_low_stock()
     
     flash('Pedido creado exitosamente')
@@ -636,7 +668,7 @@ def reporte_semanal():
         return redirect(url_for('index'))
     
     # Obtener datos de la semana actual
-    inicio_semana = datetime.now() - timedelta(days=datetime.now().weekday())
+    inicio_semana = datetime.now().date() - timedelta(days=datetime.now().weekday())
     fin_semana = inicio_semana + timedelta(days=6)
     
     pedidos = Pedido.query.filter(
@@ -645,9 +677,9 @@ def reporte_semanal():
     ).all()
     
     return render_template('reporte_semanal.html', 
-                         pedidos=pedidos, 
-                         inicio_semana=inicio_semana,
-                         fin_semana=fin_semana)
+                          pedidos=pedidos, 
+                          inicio_semana=inicio_semana,
+                          fin_semana=fin_semana)
 
 @app.route('/reportes/mensual')
 @login_required
@@ -657,38 +689,28 @@ def reporte_mensual():
         return redirect(url_for('index'))
     
     # Obtener datos del mes actual
-    inicio_mes = datetime.now().replace(day=1)
+    hoy = datetime.now()
+    inicio_mes = hoy.replace(day=1).date()
+    
+    # Calcula el primer día del mes siguiente
     if inicio_mes.month == 12:
-        fin_mes = inicio_mes.replace(year=inicio_mes.year + 1, month=1)
+        fin_mes_exclusivo = inicio_mes.replace(year=inicio_mes.year + 1, month=1)
     else:
-        fin_mes = inicio_mes.replace(month=inicio_mes.month + 1)
+        fin_mes_exclusivo = inicio_mes.replace(month=inicio_mes.month + 1)
     
     pedidos = Pedido.query.filter(
         Pedido.fecha >= inicio_mes,
-        Pedido.fecha < fin_mes
+        Pedido.fecha < fin_mes_exclusivo
     ).all()
     
     return render_template('reporte_mensual.html', 
-                         pedidos=pedidos, 
-                         inicio_mes=inicio_mes,
-                         fin_mes=fin_mes)
+                          pedidos=pedidos, 
+                          inicio_mes=inicio_mes,
+                          fin_mes=fin_mes_exclusivo - timedelta(days=1)) # Para mostrar el último día
 
+# Bloque de ejecución principal (solo para pruebas locales)
+# Ya no contiene db.create_all()
 if __name__ == '__main__':
-    with app.app_context():
-        db.create_all()
-        
-        # Crear usuario administrador por defecto
-        admin = User.query.filter_by(username='admin').first()
-        if not admin:
-            admin = User(
-                username='admin',
-                email='admin@control.com',
-                password_hash=generate_password_hash('admin123'),
-                is_admin=True
-            )
-            db.session.add(admin)
-            db.session.commit()
-    
     # En producción, gunicorn maneja el servidor
     # En desarrollo local, usar el servidor de Flask
     port = int(os.environ.get('PORT', 5000))

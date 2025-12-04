@@ -1,88 +1,187 @@
+# Importaciones necesarias
 import os
-# Importamos la aplicación Flask, el objeto db y el modelo User
-# Asegúrate de que estos están disponibles para ser importados desde app.py
-from app import app, db, User 
-from werkzeug.security import generate_password_hash
-#from dotenv import load_dotenv # Si usas variables de entorno localmente, aunque en Render usa su propio sistema
+from datetime import datetime
+from flask import Flask, render_template, redirect, url_for, flash, request
+from flask_login import UserMixin, LoginManager, login_user, logout_user, current_user, login_required
+from flask_sqlalchemy import SQLAlchemy
+from werkzeug.security import generate_password_hash, check_password_hash
+# Importación de módulos de qrcode
+import qrcode
+import io
+import base64
 
-# Configuración de Contraseña de Administrador
-# ----------------------------------------------------
-# IMPORTANTE: Reemplaza 'tu_password_segura_aqui' con la contraseña que deseas usar
-# para el usuario 'admin'. Este script solo se ejecutará una vez.
-# Es altamente recomendado usar una Variable de Entorno en Render para esta contraseña,
-# pero para la primera vez, puedes dejarla hardcodeada temporalmente para probar.
-ADMIN_PASSWORD = os.environ.get('ADMIN_INIT_PASSWORD', 'admin123')
-ADMIN_USERNAME = 'admin'
-# ----------------------------------------------------
+# Inicialización de la Aplicación y Configuración
+app = Flask(__name__)
 
-def initialize_database():
-    """
-    Función para crear todas las tablas e insertar el usuario administrador.
-    """
-    with app.app_context():
-        print("--- Iniciando Configuración de Base de Datos ---")
+# Configuración secreta de la app
+# Render necesita esta variable de entorno
+app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'default_secret_key_local')
 
-    try:
-        db.create_all()
-        print("Tablas creadas/verificadas exitosamente (db.create_all()).")
-    except Exception as e:
-        print(f"ERROR CRÍTICO: Fallo al crear tablas. Verifica la conexión a DB. Error: {e}")
-        return
+# Configuración de Base de Datos PostgreSQL para Render
+# Usamos SQLALCHEMY_DATABASE_URI para la conexión
+app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL')
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
-    admin_user = User.query.filter_by(username=ADMIN_USERNAME).first()
+# Base de datos
+db = SQLAlchemy(app)
 
-    if not admin_user:
-        password_hash = generate_password_hash(ADMIN_PASSWORD)
+# ---------------------------------------------
+# Configuración de Flask-Login
+# ---------------------------------------------
+login_manager = LoginManager()
+login_manager.init_app(app)
+login_manager.login_view = 'login'
+
+@login_manager.user_loader
+def load_user(user_id):
+    return User.query.get(int(user_id))
+
+# ---------------------------------------------
+# Definición del Modelo de Usuario (User)
+# ---------------------------------------------
+class User(UserMixin, db.Model):
+    __tablename__ = 'user' # Nombre de la tabla explícito
+    id = db.Column(db.Integer, primary_key=True)
+    username = db.Column(db.String(80), unique=True, nullable=False)
+    email = db.Column(db.String(120), unique=True, nullable=False)
+    password_hash = db.Column(db.String(256), nullable=False)
+    is_admin = db.Column(db.Boolean, default=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    # Relación con la tabla Product (si existe, asumo que sí)
+    products = db.relationship('Product', backref='owner', lazy='dynamic')
+
+    def set_password(self, password):
+        self.password_hash = generate_password_hash(password)
+
+    def check_password(self, password):
+        return check_password_hash(self.password_hash, password)
+    
+    def __repr__(self):
+        return f'<User {self.username}>'
+
+
+# ---------------------------------------------
+# Definición del Modelo de Producto (Product)
+# ---------------------------------------------
+class Product(db.Model):
+    __tablename__ = 'product' # Nombre de la tabla explícito
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), nullable=False)
+    code = db.Column(db.String(100), unique=True, nullable=False)
+    quantity = db.Column(db.Integer, default=0)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    def __repr__(self):
+        return f'<Product {self.name}>'
+
+# ---------------------------------------------
+# Rutas
+# ---------------------------------------------
+
+@app.route('/')
+def index():
+    if current_user.is_authenticated:
+        return redirect(url_for('dashboard'))
+    return redirect(url_for('login'))
+
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if current_user.is_authenticated:
+        return redirect(url_for('dashboard'))
+    
+    if request.method == 'POST':
+        username = request.form.get('username')
+        password = request.form.get('password')
         
-        new_admin = User(
-            username=ADMIN_USERNAME,
-            email='admin@control-escolar.com', 
-            password_hash=password_hash,
-            is_admin=True 
+        # Buscar el usuario
+        user = User.query.filter_by(username=username).first() # LINE 172 in the log
+        
+        if user and user.check_password(password):
+            login_user(user, remember=True)
+            flash('Inicio de sesión exitoso.', 'success')
+            next_page = request.args.get('next')
+            return redirect(next_page or url_for('dashboard'))
+        else:
+            flash('Nombre de usuario o contraseña inválidos.', 'danger')
+            
+    return render_template('login.html')
+
+@app.route('/logout')
+@login_required
+def logout():
+    logout_user()
+    flash('Has cerrado sesión.', 'info')
+    return redirect(url_for('login'))
+
+# --- Dashboard y Gestión de Productos (Rutas dummy para contexto) ---
+
+@app.route('/dashboard')
+@login_required
+def dashboard():
+    products = Product.query.filter_by(user_id=current_user.id).order_by(Product.created_at.desc()).all()
+    return render_template('dashboard.html', products=products)
+
+@app.route('/product/add', methods=['GET', 'POST'])
+@login_required
+def add_product():
+    if request.method == 'POST':
+        name = request.form.get('name')
+        code = request.form.get('code')
+        quantity = int(request.form.get('quantity', 0))
+        
+        # Validación: Código de producto único
+        existing_product = Product.query.filter_by(code=code).first()
+        if existing_product:
+            flash(f'El código de producto "{code}" ya existe.', 'danger')
+            return redirect(url_for('add_product'))
+
+        new_product = Product(
+            name=name,
+            code=code,
+            quantity=quantity,
+            user_id=current_user.id
         )
-        
-        db.session.add(new_admin)
+        db.session.add(new_product)
         db.session.commit()
-        print(f"Usuario '{ADMIN_USERNAME}' creado.")
-        print(f"¡IMPORTANTE! Contraseña de inicio de sesión: {ADMIN_PASSWORD}")
-    else:
-        print(f"Usuario '{ADMIN_USERNAME}' ya existe. No se creó uno nuevo.")
-        
-    print("--- Configuración de Base de Datos Terminada ---")
-        
-        # 1. Crear todas las tablas
-        # Esto le dice a SQLAlchemy que cree las tablas definidas en todos los modelos (User, Producto, etc.)
-        #try:
-         #   db.create_all()
-        #    print("Tablas creadas exitosamente (db.create_all()).")
-       # except Exception as e:
-         #   print(f"Error al crear tablas: {e}")
-            # Si esto falla, verifica la variable de entorno DATABASE_URL en Render.
+        flash('Producto agregado exitosamente.', 'success')
+        return redirect(url_for('dashboard'))
+    
+    return render_template('add_product.html')
 
-        # 2. Verificar y crear el usuario administrador si no existe
-       # admin_user = User.query.filter_by(username=ADMIN_USERNAME).first()
+@app.route('/product/qr/<code>')
+@login_required
+def generate_qr(code):
+    product = Product.query.filter_by(code=code, user_id=current_user.id).first_or_404()
+    
+    # Contenido del código QR
+    qr_data = f"Nombre: {product.name}, Código: {product.code}, Cantidad: {product.quantity}"
+    
+    qr = qrcode.QRCode(
+        version=1,
+        error_correction=qrcode.constants.ERROR_CORRECT_L,
+        box_size=10,
+        border=4,
+    )
+    qr.add_data(qr_data)
+    qr.make(fit=True)
 
-       # if not admin_user:
-            # Genera el hash de la contraseña. 
-            # ASEGÚRATE de que el 'method' (default: 'pbkdf2:sha256') coincida con el que usa tu app.py si es diferente.
-          #  password_hash = generate_password_hash(ADMIN_PASSWORD)
-            
-           # new_admin = User(
-            #    username=ADMIN_USERNAME,
-                # Email o cualquier otro campo requerido por tu modelo User
-             #   email='admin@control-escolar.com', 
-              #  password_hash=password_hash,
-               # is_admin=True # Asegúrate de que tu modelo User tiene este campo
-          #  )
-            
-          #  db.session.add(new_admin)
-          #  db.session.commit()
-          #  print(f"Usuario '{ADMIN_USERNAME}' creado.")
-          #  print(f"¡IMPORTANTE! Usa la contraseña: {ADMIN_PASSWORD}")
-       # else:
-         #   print(f"Usuario '{ADMIN_USERNAME}' ya existe. No se creó uno nuevo.")
-            
-       # print("--- Configuración de Base de Datos Terminada ---")#
+    img = qr.make_image(fill_color="black", back_color="white")
 
+    # Guardar en buffer de memoria
+    buffer = io.BytesIO()
+    img.save(buffer, format="PNG")
+    
+    # Codificar a base64 para incrustar en HTML
+    qr_base64 = base64.b64encode(buffer.getvalue()).decode()
+    
+    return render_template('qr_code.html', qr_base64=qr_base64, product=product)
+
+
+# ---------------------------------------------
+# Bloque de ejecución principal (solo para pruebas locales)
+# ---------------------------------------------
 if __name__ == '__main__':
-    initialize_database()
+    # Este bloque solo se usa para desarrollo local y no se ejecuta en Render con Gunicorn
+    app.run(debug=True)

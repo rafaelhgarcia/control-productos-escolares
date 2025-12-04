@@ -19,6 +19,7 @@ app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'default_secret_key_loca
 
 # Configuración de Base de Datos PostgreSQL para Render
 # Usamos SQLALCHEMY_DATABASE_URI para la conexión
+# La variable de entorno 'DATABASE_URL' debe ser establecida en Render
 app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
@@ -34,7 +35,10 @@ login_manager.login_view = 'login'
 
 @login_manager.user_loader
 def load_user(user_id):
-    return User.query.get(int(user_id))
+    # La aplicación ya está inicializada, usamos app.app_context() si fuera necesario,
+    # pero para una aplicación Flask simple esto debería funcionar directamente.
+    return db.session.get(User, int(user_id))
+
 
 # ---------------------------------------------
 # Definición del Modelo de Usuario (User)
@@ -96,7 +100,7 @@ def login():
         password = request.form.get('password')
         
         # Buscar el usuario
-        user = User.query.filter_by(username=username).first() # LINE 172 in the log
+        user = User.query.filter_by(username=username).first()
         
         if user and user.check_password(password):
             login_user(user, remember=True)
@@ -178,10 +182,5 @@ def generate_qr(code):
     
     return render_template('qr_code.html', qr_base64=qr_base64, product=product)
 
-
-# ---------------------------------------------
-# Bloque de ejecución principal (solo para pruebas locales)
-# ---------------------------------------------
-if __name__ == '__main__':
-    # Este bloque solo se usa para desarrollo local y no se ejecuta en Render con Gunicorn
-    app.run(debug=True)
+# NOTA: Se ha eliminado el bloque if __name__ == '__main__':
+# La aplicación 'app' es importada y servida por Gunicorn.

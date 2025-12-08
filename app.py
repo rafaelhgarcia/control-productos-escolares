@@ -35,16 +35,13 @@ login_manager.login_view = 'login'
 
 @login_manager.user_loader
 def load_user(user_id):
-    # La aplicación ya está inicializada, usamos app.app_context() si fuera necesario,
-    # pero para una aplicación Flask simple esto debería funcionar directamente.
     return db.session.get(User, int(user_id))
 
 
 # ---------------------------------------------
-# Definición del Modelo de Usuario (User)
+# Definición de Modelos (User y Product ya estaban)
 # ---------------------------------------------
 class User(UserMixin, db.Model):
-    # Cambiamos 'user' a 'users' para evitar conflictos con la palabra reservada de PostgreSQL
     __tablename__ = 'users' 
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80), unique=True, nullable=False)
@@ -53,8 +50,9 @@ class User(UserMixin, db.Model):
     is_admin = db.Column(db.Boolean, default=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     
-    # Relación con la tabla Product (si existe, asumo que sí)
     products = db.relationship('Product', backref='owner', lazy='dynamic')
+    supervisors_created = db.relationship('Supervisor', backref='creator', lazy='dynamic')
+    escuelas_managed = db.relationship('Escuela', backref='manager', lazy='dynamic')
 
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)
@@ -66,20 +64,53 @@ class User(UserMixin, db.Model):
         return f'<User {self.username}>'
 
 
-# ---------------------------------------------
-# Definición del Modelo de Producto (Product)
-# ---------------------------------------------
 class Product(db.Model):
-    __tablename__ = 'products' # También cambiamos a 'products' por consistencia
+    __tablename__ = 'products' 
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False)
     code = db.Column(db.String(100), unique=True, nullable=False)
     quantity = db.Column(db.Integer, default=0)
-    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False) # Actualizamos la clave foránea a 'users.id'
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False) 
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     
     def __repr__(self):
         return f'<Product {self.name}>'
+
+# ---------------------------------------------
+# MODELOS NUEVOS AGREGADOS
+# ---------------------------------------------
+
+class Bodega(db.Model):
+    __tablename__ = 'bodegas'
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), unique=True, nullable=False)
+    location = db.Column(db.String(150), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    def __repr__(self):
+        return f'<Bodega {self.name}>'
+
+class Supervisor(db.Model):
+    __tablename__ = 'supervisors'
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), nullable=False)
+    employee_code = db.Column(db.String(50), unique=True, nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False) # Asumiendo que el admin crea supervisores
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    def __repr__(self):
+        return f'<Supervisor {self.name}>'
+
+class Escuela(db.Model):
+    __tablename__ = 'escuelas'
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), unique=True, nullable=False)
+    address = db.Column(db.String(250), nullable=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False) # Asumiendo que el admin las gestiona
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    def __repr__(self):
+        return f'<Escuela {self.name}>'
 
 # ---------------------------------------------
 # Rutas
@@ -126,7 +157,12 @@ def logout():
 @login_required
 def dashboard():
     products = Product.query.filter_by(user_id=current_user.id).order_by(Product.created_at.desc()).all()
-    return render_template('dashboard.html', products=products)
+    # Modificado para pasar datos de ejemplo para las nuevas secciones
+    bodegas = Bodega.query.all()
+    supervisores = Supervisor.query.all()
+    escuelas = Escuela.query.all()
+    
+    return render_template('dashboard.html', products=products, bodegas=bodegas, supervisores=supervisores, escuelas=escuelas)
 
 @app.route('/product/add', methods=['GET', 'POST'])
 @login_required

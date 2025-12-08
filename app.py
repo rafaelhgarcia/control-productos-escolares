@@ -266,5 +266,30 @@ def list_escuelas():
     # Asegúrate de que tienes una plantilla llamada 'list_escuelas.html'
     return render_template('list_escuelas.html', escuelas=escuelas)
 
+# --- RUTAS DE CREACIÓN FALTANTES ---
+
+# Redirección para /productos/crear (si tu botón en el dashboard usa este URL)
+@app.route('/productos/crear')
+@login_required
+def redirect_to_add_product():
+    return redirect(url_for('add_product'))
+
+
+# Ruta para crear Bodegas
+@app.route('/bodegas/crear')
+@login_required
+def create_bodega_page():
+    # Asegúrate de que tienes una plantilla llamada 'create_bodega.html'
+    return render_template('create_bodega.html')
+
+# Ruta para crear Escuelas
+@app.route('/escuelas/crear')
+@login_required
+def create_escuela_page():
+    # Asegúrate de que tienes una plantilla llamada 'create_escuela.html'
+    return render_template('create_escuela.html')
+
+# NOTA: La ruta /supervisores/crear ya existe en el código anterior.
+
 # NOTA: Se ha eliminado el bloque if __name__ == '__main__':
 # La aplicación 'app' es importada y servida por Gunicorn.

@@ -11,18 +11,15 @@ import base64
 # =========================================================================
 # 1. INICIALIZACIÓN Y CONFIGURACIÓN DE FLASK
 # =========================================================================
-
-# Inicializa la aplicación Flask (SOLUCIÓN al NameError)
-app = Flask(__name__) 
-
-# Configuración de la aplicación
-app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'UNA_CLAVE_SECRETA_POR_DEFECTO')
+# ... (otras configuraciones)
 
 # Configuración de la base de datos PostgreSQL de Render
 # Usa la variable de entorno DATABASE_URL proporcionada por Render
-app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL').replace('://', 'ql://', 1) 
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+# CAMBIA ESTA LÍNEA:
+app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL').replace('postgres://', 'postgresql://', 1) 
+# app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL').replace('://', 'ql://', 1)  <-- ESTA ES LA LÍNEA ANTIGUA CON ERROR
 
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 # Inicializa la base de datos
 db = SQLAlchemy(app)
 

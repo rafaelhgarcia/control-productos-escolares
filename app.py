@@ -219,5 +219,52 @@ def generate_qr(code):
     
     return render_template('qr_code.html', qr_base64=qr_base64, product=product)
 
+# --- RUTAS DE GESTIÓN DE PRODUCTOS ---
+# NOTA: La ruta /productos es para listar todos los productos
+@app.route('/productos')
+@login_required
+def list_products():
+    # Asumo que esta ruta lista todos los productos del usuario actual
+    productos = Product.query.filter_by(user_id=current_user.id).all()
+    # Asegúrate de que tienes una plantilla llamada 'list_products.html'
+    return render_template('list_products.html', productos=productos)
+
+
+# --- RUTAS DE GESTIÓN DE BODEGAS ---
+@app.route('/bodegas')
+@login_required
+def list_bodegas():
+    # Esta ruta lista todas las bodegas
+    bodegas = Bodega.query.all() 
+    # Asegúrate de que tienes una plantilla llamada 'list_bodegas.html'
+    return render_template('list_bodegas.html', bodegas=bodegas)
+
+
+# --- RUTAS DE GESTIÓN DE SUPERVISORES ---
+@app.route('/supervisores')
+@login_required
+def list_supervisores():
+    # Esta ruta lista todos los supervisores
+    supervisores = Supervisor.query.all()
+    # Asegúrate de que tienes una plantilla llamada 'list_supervisores.html'
+    return render_template('list_supervisores.html', supervisores=supervisores)
+
+# Rutas para crear, editar, eliminar supervisores... (ejemplo de ruta que viste en logs)
+@app.route('/supervisores/crear')
+@login_required
+def create_supervisor_page():
+    # Lógica y plantilla para crear un nuevo supervisor
+    return render_template('create_supervisor.html')
+
+
+# --- RUTAS DE GESTIÓN DE ESCUELAS ---
+@app.route('/escuelas')
+@login_required
+def list_escuelas():
+    # Esta ruta lista todas las escuelas
+    escuelas = Escuela.query.all()
+    # Asegúrate de que tienes una plantilla llamada 'list_escuelas.html'
+    return render_template('list_escuelas.html', escuelas=escuelas)
+
 # NOTA: Se ha eliminado el bloque if __name__ == '__main__':
 # La aplicación 'app' es importada y servida por Gunicorn.

@@ -4,7 +4,7 @@ from flask import Flask, render_template, redirect, url_for, flash, request
 from flask_login import UserMixin, LoginManager, login_user, logout_user, current_user, login_required
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import generate_password_hash, check_password_hash
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError # <-- IMPORTS CORREGIDOS
 import qrcode
 import io
 import base64
@@ -19,7 +19,6 @@ app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'UNA_CLAVE_SECRETA_SUPER_FUERTE')
 
 # Configuración de la base de datos PostgreSQL de Render
-# Usa la corrección de 'postgres://' a 'postgresql://'
 if os.environ.get('DATABASE_URL'):
     db_url = os.environ.get('DATABASE_URL').replace('postgres://', 'postgresql://', 1)
 else:
@@ -38,23 +37,19 @@ login_manager.login_view = 'login'
 
 @login_manager.user_loader
 def load_user(user_id):
-    # Usar db.session.get() para la versión moderna de SQLAlchemy
     return db.session.get(User, int(user_id))
 
 # =========================================================================
-# 2. DEFINICIÓN DE MODELOS (Corregido y con is_admin)
+# 2. DEFINICIÓN DE MODELOS
 # =========================================================================
 
 class User(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80), unique=True, nullable=False)
     email = db.Column(db.String(100), unique=True, nullable=False)
-    is_admin = db.Column(db.Boolean, default=False)  # <-- Campo Faltante Agregado
+    is_admin = db.Column(db.Boolean, default=False)
     password_hash = db.Column(db.String(128))
-    
-    # Asegúrate de no duplicar 'password_hash' ni 'products' como en el código original
-    # products = db.relationship('Product', backref='user', lazy=True) # Mantener si es necesario, pero elimino la duplicidad
-    
+
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)
 
@@ -65,31 +60,27 @@ class Product(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False)
     code = db.Column(db.String(50), unique=True, nullable=False)
-    # user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False) # Descomentar si Product tiene relación con User
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    # Agrega más campos si son necesarios para el inventario (ej: stock, bodega_id)
     stock = db.Column(db.Integer, default=0)
     
 class Bodega(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False, unique=True)
-    location = db.Column(db.String(200)) # Campo adicional
-    
+    location = db.Column(db.String(200), nullable=True) # Permitir nulo
+
 class Supervisor(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False)
-    qr_code_data = db.Column(db.String(255), unique=True) # Datos para el QR
+    qr_code_data = db.Column(db.String(255), unique=True, nullable=True)
 
 class Escuela(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False)
-    qr_code_data = db.Column(db.String(255), unique=True) # Datos para el QR
+    qr_code_data = db.Column(db.String(255), unique=True, nullable=True)
 
 # =========================================================================
-# 3. RUTAS DE LA APLICACIÓN (Completas con CRUD básico)
+# 3. RUTAS DE ACCESO Y DASHBOARD
 # =========================================================================
-
-# --- Acceso y Dashboard ---
 
 @app.route('/')
 def index():
@@ -125,12 +116,11 @@ def logout():
 @app.route('/dashboard')
 @login_required
 def dashboard():
-    # Solo se envían listas a dashboard.html si es necesario para estadísticas
     return render_template('dashboard.html')
 
 
 # -------------------------------------------------------------------------
-# RUTAS DE BODEGAS (CRUD Completo)
+# RUTAS DE BODEGAS (CRUD Completo y Corregido)
 # -------------------------------------------------------------------------
 
 @app.route('/bodegas')
@@ -144,7 +134,11 @@ def list_bodegas():
 def create_bodega():
     if request.method == 'POST':
         name = request.form.get('name')
-        location = request.form.get('location') # Asume que hay un campo 'location' en el formulario
+        location = request.form.get('location')
+
+        if not name:
+            flash('El nombre de la bodega es obligatorio.', 'error')
+            return render_template('crear_bodega.html')
         
         new_bodega = Bodega(name=name, location=location)
         try:
@@ -155,6 +149,9 @@ def create_bodega():
         except IntegrityError:
             db.session.rollback()
             flash('Error: Ya existe una bodega con ese nombre.', 'error')
+        except SQLAlchemyError as e:
+            db.session.rollback()
+            flash(f'Ocurrió un error inesperado al guardar la bodega: {e}', 'error')
             
     return render_template('crear_bodega.html')
 
@@ -167,7 +164,12 @@ def edit_bodega(id):
         return redirect(url_for('list_bodegas'))
 
     if request.method == 'POST':
-        bodega.name = request.form.get('name')
+        name = request.form.get('name')
+        if not name:
+            flash('El nombre de la bodega es obligatorio.', 'error')
+            return render_template('editar_bodega.html', bodega=bodega)
+
+        bodega.name = name
         bodega.location = request.form.get('location')
         try:
             db.session.commit()
@@ -176,6 +178,9 @@ def edit_bodega(id):
         except IntegrityError:
             db.session.rollback()
             flash('Error: Ya existe otra bodega con ese nombre.', 'error')
+        except SQLAlchemyError as e:
+            db.session.rollback()
+            flash(f'Ocurrió un error inesperado al actualizar la bodega: {e}', 'error')
             
     return render_template('editar_bodega.html', bodega=bodega)
 
@@ -184,16 +189,20 @@ def edit_bodega(id):
 def delete_bodega(id):
     bodega = db.session.get(Bodega, id) or None
     if bodega:
-        db.session.delete(bodega)
-        db.session.commit()
-        flash('Bodega eliminada exitosamente.', 'success')
+        try:
+            db.session.delete(bodega)
+            db.session.commit()
+            flash('Bodega eliminada exitosamente.', 'success')
+        except SQLAlchemyError as e:
+            db.session.rollback()
+            flash(f'Error al eliminar la bodega. Posiblemente está vinculada a productos: {e}', 'error')
     else:
         flash('Bodega no encontrada.', 'error')
     return redirect(url_for('list_bodegas'))
 
 
 # -------------------------------------------------------------------------
-# RUTAS DE PRODUCTOS (CRUD Completo)
+# RUTAS DE PRODUCTOS (CRUD Completo y Corregido)
 # -------------------------------------------------------------------------
 
 @app.route('/productos')
@@ -210,6 +219,10 @@ def add_product():
         code = request.form.get('code')
         stock = request.form.get('stock', type=int, default=0)
         
+        if not name or not code:
+            flash('Nombre y Código del producto son obligatorios.', 'error')
+            return render_template('crear_producto.html')
+
         new_product = Product(name=name, code=code, stock=stock)
         try:
             db.session.add(new_product)
@@ -219,15 +232,35 @@ def add_product():
         except IntegrityError:
             db.session.rollback()
             flash('Error: Ya existe un producto con ese código.', 'error')
+        except SQLAlchemyError as e:
+            db.session.rollback()
+            flash(f'Ocurrió un error inesperado al guardar el producto: {e}', 'error')
             
-    # Usa la plantilla 'crear_producto.html' que tenías
     return render_template('crear_producto.html')
 
+@app.route('/productos/crear')
+@login_required
+def redirect_to_add_product():
+    return redirect(url_for('add_product'))
 
-# Las rutas /productos/crear y /product/qr/<code> se mantienen como estaban.
+# Nota: Se necesitarían rutas 'editar_product' y 'delete_product' similares a las de Bodega si fuera necesario.
+
+@app.route('/product/qr/<code>')
+@login_required
+def generate_qr(code):
+    # Lógica para generar QR (mantenida)
+    qr = qrcode.QRCode(version=1, error_correction=qrcode.constants.ERROR_CORRECT_L, box_size=10, border=4)
+    qr.add_data(code)
+    qr.make(fit=True)
+    img = qr.make_image(fill_color="black", back_color="white")
+    buffer = io.BytesIO()
+    img.save(buffer, format="PNG")
+    qr_base64 = base64.b64encode(buffer.getvalue()).decode()
+    product = Product.query.filter_by(code=code).first_or_404()
+    return render_template('qr_code.html', qr_base64=qr_base64, product=product)
 
 # -------------------------------------------------------------------------
-# RUTAS DE SUPERVISORES (CRUD Básico)
+# RUTAS DE SUPERVISORES (CRUD Corregido)
 # -------------------------------------------------------------------------
 
 @app.route('/supervisores')
@@ -241,26 +274,33 @@ def list_supervisores():
 def create_supervisor():
     if request.method == 'POST':
         name = request.form.get('name')
-        # Generar QR data basado en el nombre o un ID único
+        
+        if not name:
+            flash('El nombre del supervisor es obligatorio.', 'error')
+            return render_template('crear_supervisor.html')
+
         qr_data = f"Supervisor:{name}-{datetime.now().timestamp()}"
         
         new_supervisor = Supervisor(name=name, qr_code_data=qr_data)
+        
         try:
             db.session.add(new_supervisor)
             db.session.commit()
             flash('Supervisor creado exitosamente.', 'success')
-            return redirect(url_for('list_supervisores'))
+            return redirect(url_for('list_supervisores')) 
+            
         except IntegrityError:
             db.session.rollback()
-            flash('Error al crear supervisor (posible duplicidad).', 'error')
+            flash('Error: Ya existe un supervisor con datos duplicados.', 'error')
+            
+        except SQLAlchemyError as e:
+            db.session.rollback()
+            flash(f'Ocurrió un error inesperado al guardar el supervisor: {e}', 'error')
             
     return render_template('crear_supervisor.html')
 
-# Se omiten las funciones de editar/eliminar para brevedad, pero deberían ser añadidas
-
-
 # -------------------------------------------------------------------------
-# RUTAS DE ESCUELAS (CRUD Básico)
+# RUTAS DE ESCUELAS (CRUD Corregido)
 # -------------------------------------------------------------------------
 
 @app.route('/escuelas')
@@ -274,7 +314,11 @@ def list_escuelas():
 def create_escuela():
     if request.method == 'POST':
         name = request.form.get('name')
-        # Generar QR data
+        
+        if not name:
+            flash('El nombre de la escuela es obligatorio.', 'error')
+            return render_template('crear_escuela.html')
+
         qr_data = f"Escuela:{name}-{datetime.now().timestamp()}"
         
         new_escuela = Escuela(name=name, qr_code_data=qr_data)
@@ -286,6 +330,9 @@ def create_escuela():
         except IntegrityError:
             db.session.rollback()
             flash('Error al crear escuela (posible duplicidad).', 'error')
+        except SQLAlchemyError as e:
+            db.session.rollback()
+            flash(f'Ocurrió un error inesperado al guardar la escuela: {e}', 'error')
 
     return render_template('crear_escuela.html')
 
@@ -306,34 +353,11 @@ def pedidos_page():
     return render_template('pedidos.html')
 
 
-# --- Generador de QR (Mantenido) ---
-
-@app.route('/product/qr/<code>')
-@login_required
-def generate_qr(code):
-    # Lógica para generar QR (la misma que tenías)
-    qr = qrcode.QRCode(version=1, error_correction=qrcode.constants.ERROR_CORRECT_L, box_size=10, border=4)
-    qr.add_data(code)
-    qr.make(fit=True)
-
-    img = qr.make_image(fill_color="black", back_color="white")
-    
-    buffer = io.BytesIO()
-    img.save(buffer, format="PNG")
-    qr_base64 = base64.b64encode(buffer.getvalue()).decode()
-
-    # Intenta buscar el producto
-    product = Product.query.filter_by(code=code).first_or_404()
-    return render_template('qr_code.html', qr_base64=qr_base64, product=product)
-
 # =========================================================================
 # Ejecución de la aplicación
 # =========================================================================
 
-# Esta sección se ejecuta localmente si no usas gunicorn. En Render, gunicorn lo ignora.
 if __name__ == '__main__':
-    # Asegúrate de que 'db.create_all()' se ejecute si ejecutas localmente
-    # con: python app.py
     with app.app_context():
         db.create_all() 
     app.run(debug=True)

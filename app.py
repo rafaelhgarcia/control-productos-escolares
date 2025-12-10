@@ -4,7 +4,7 @@ from flask import Flask, render_template, redirect, url_for, flash, request
 from flask_login import UserMixin, LoginManager, login_user, logout_user, current_user, login_required
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import generate_password_hash, check_password_hash
-from sqlalchemy.exc import IntegrityError, SQLAlchemyError # <-- IMPORTS CORREGIDOS
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError 
 import qrcode
 import io
 import base64
@@ -40,7 +40,7 @@ def load_user(user_id):
     return db.session.get(User, int(user_id))
 
 # =========================================================================
-# 2. DEFINICIÓN DE MODELOS
+# 2. DEFINICIÓN DE MODELOS (Corregido y Unificado)
 # =========================================================================
 
 class User(UserMixin, db.Model):
@@ -66,11 +66,14 @@ class Product(db.Model):
 class Bodega(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False, unique=True)
-    location = db.Column(db.String(200), nullable=True) # Permitir nulo
+    location = db.Column(db.String(200), nullable=True)
 
+# CLASE SUPERVISOR (CORREGIDA con Apellido y Email)
 class Supervisor(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False)
+    apellido = db.Column(db.String(100), nullable=False) # <--- CAMPO AGREGADO
+    email = db.Column(db.String(120), unique=True, nullable=False) # <--- CAMPO AGREGADO
     qr_code_data = db.Column(db.String(255), unique=True, nullable=True)
 
 class Escuela(db.Model):
@@ -120,7 +123,7 @@ def dashboard():
 
 
 # -------------------------------------------------------------------------
-# RUTAS DE BODEGAS (CRUD Completo y Corregido)
+# RUTAS DE BODEGAS
 # -------------------------------------------------------------------------
 
 @app.route('/bodegas')
@@ -202,7 +205,7 @@ def delete_bodega(id):
 
 
 # -------------------------------------------------------------------------
-# RUTAS DE PRODUCTOS (CRUD Completo y Corregido)
+# RUTAS DE PRODUCTOS
 # -------------------------------------------------------------------------
 
 @app.route('/productos')
@@ -243,12 +246,10 @@ def add_product():
 def redirect_to_add_product():
     return redirect(url_for('add_product'))
 
-# Nota: Se necesitarían rutas 'editar_product' y 'delete_product' similares a las de Bodega si fuera necesario.
-
 @app.route('/product/qr/<code>')
 @login_required
 def generate_qr(code):
-    # Lógica para generar QR (mantenida)
+    # Lógica para generar QR
     qr = qrcode.QRCode(version=1, error_correction=qrcode.constants.ERROR_CORRECT_L, box_size=10, border=4)
     qr.add_data(code)
     qr.make(fit=True)
@@ -260,7 +261,7 @@ def generate_qr(code):
     return render_template('qr_code.html', qr_base64=qr_base64, product=product)
 
 # -------------------------------------------------------------------------
-# RUTAS DE SUPERVISORES (CRUD Corregido)
+# RUTAS DE SUPERVISORES (Lógica POST CORREGIDA)
 # -------------------------------------------------------------------------
 
 @app.route('/supervisores')
@@ -273,25 +274,38 @@ def list_supervisores():
 @login_required
 def create_supervisor():
     if request.method == 'POST':
+        # 1. OBTENER TODOS LOS DATOS REQUERIDOS DEL FORMULARIO
         name = request.form.get('name')
+        apellido = request.form.get('apellido') # <--- CORREGIDO
+        email = request.form.get('email')     # <--- CORREGIDO
         
-        if not name:
-            flash('El nombre del supervisor es obligatorio.', 'error')
-            return render_template('crear_supervisor.html')
+        # 2. Validación de campos obligatorios
+        if not name or not apellido or not email:
+            flash('Todos los campos (Nombre, Apellido, Email) son obligatorios.', 'error')
+            # Renderiza la plantilla nuevamente, pasando los valores para no perderlos
+            return render_template('crear_supervisor.html', name=name, apellido=apellido, email=email)
 
-        qr_data = f"Supervisor:{name}-{datetime.now().timestamp()}"
+        # 3. Generar el QR Data 
+        qr_data = f"Supervisor:{name}-{apellido}:{email}-{datetime.now().timestamp()}"
         
-        new_supervisor = Supervisor(name=name, qr_code_data=qr_data)
+        # 4. Crear el objeto con todos los campos
+        new_supervisor = Supervisor(
+            name=name, 
+            apellido=apellido,  
+            email=email,        
+            qr_code_data=qr_data
+        )
         
         try:
             db.session.add(new_supervisor)
             db.session.commit()
             flash('Supervisor creado exitosamente.', 'success')
-            return redirect(url_for('list_supervisores')) 
+            return redirect(url_for('list_supervisores')) # REDIRECCIÓN DE ÉXITO 
             
         except IntegrityError:
             db.session.rollback()
-            flash('Error: Ya existe un supervisor con datos duplicados.', 'error')
+            # Posiblemente por email duplicado o QR
+            flash('Error: Ya existe un supervisor con ese Email o datos duplicados.', 'error')
             
         except SQLAlchemyError as e:
             db.session.rollback()
@@ -300,7 +314,7 @@ def create_supervisor():
     return render_template('crear_supervisor.html')
 
 # -------------------------------------------------------------------------
-# RUTAS DE ESCUELAS (CRUD Corregido)
+# RUTAS DE ESCUELAS
 # -------------------------------------------------------------------------
 
 @app.route('/escuelas')
@@ -337,19 +351,17 @@ def create_escuela():
     return render_template('crear_escuela.html')
 
 # -------------------------------------------------------------------------
-# RUTAS ADICIONALES DEL DASHBOARD (Para eliminar los 404s)
+# RUTAS ADICIONALES DEL DASHBOARD
 # -------------------------------------------------------------------------
 
 @app.route('/reportes')
 @login_required
 def reportes_page():
-    # Asume que tienes una plantilla llamada 'reportes.html'
     return render_template('reportes.html')
 
 @app.route('/pedidos')
 @login_required
 def pedidos_page():
-    # Asume que tienes una plantilla llamada 'pedidos.html'
     return render_template('pedidos.html')
 
 

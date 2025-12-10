@@ -25,6 +25,21 @@
     </nav>
 
     <div class="container mt-4">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                <div class="row justify-content-center">
+                    <div class="col-md-8">
+                        {% for category, message in messages %}
+                            <div class="alert alert-{{ 'success' if category == 'success' else 'danger' if category == 'error' else 'info' }} alert-dismissible fade show" role="alert">
+                                {{ message }}
+                                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                            </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            {% endif %}
+        {% endwith %}
+
         <div class="row justify-content-center">
             <div class="col-md-8">
                 <div class="card">
@@ -32,20 +47,23 @@
                         <h4><i class="fas fa-plus"></i> Crear Nuevo Supervisor</h4>
                     </div>
                     <div class="card-body">
-                        <form method="POST">
+                        <form method="POST"> 
                             <div class="mb-3">
                                 <label for="nombre" class="form-label">Nombre</label>
-                                <input type="text" class="form-control" id="nombre" name="nombre" required>
+                                <input type="text" class="form-control" id="nombre" name="name" 
+                                       value="{{ request.form.get('name', '') }}" required>
                             </div>
                             
                             <div class="mb-3">
                                 <label for="apellido" class="form-label">Apellido</label>
-                                <input type="text" class="form-control" id="apellido" name="apellido" required>
+                                <input type="text" class="form-control" id="apellido" name="apellido" 
+                                       value="{{ request.form.get('apellido', '') }}" required>
                             </div>
                             
                             <div class="mb-3">
                                 <label for="email" class="form-label">Email</label>
-                                <input type="email" class="form-control" id="email" name="email" required>
+                                <input type="email" class="form-control" id="email" name="email" 
+                                       value="{{ request.form.get('email', '') }}" required>
                             </div>
                             
                             <div class="alert alert-info">

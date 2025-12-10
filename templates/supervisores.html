@@ -7,7 +7,6 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <style>
-        /* Estilos opcionales para la tabla */
         .card-supervisor {
             margin-bottom: 20px;
         }
@@ -20,10 +19,10 @@
                 <i class="fas fa-school"></i> Control Productos Escolares
             </a>
             <div class="navbar-nav ms-auto">
-                <a class="nav-link" href="/dashboard">
+                <a class="nav-link" href="{{ url_for('dashboard') }}">
                     <i class="fas fa-tachometer-alt"></i> Dashboard
                 </a>
-                <a class="nav-link" href="/logout">
+                <a class="nav-link" href="{{ url_for('logout') }}">
                     <i class="fas fa-sign-out-alt"></i> Cerrar Sesión
                 </a>
             </div>
@@ -73,10 +72,10 @@
                                     <td>{{ supervisor.email }}</td>
                                     <td><small>{{ supervisor.qr_code_data[:30] }}...</small></td>
                                     <td>
-                                        <a href="#" class="btn btn-sm btn-info" title="Ver QR">
+                                        <a href="{{ url_for('view_supervisor_qr', id=supervisor.id) }}" class="btn btn-sm btn-info" title="Ver QR" target="_blank">
                                             <i class="fas fa-qrcode"></i>
                                         </a>
-                                        <a href="#" class="btn btn-sm btn-warning" title="Editar">
+                                        <a href="{{ url_for('edit_supervisor', id=supervisor.id) }}" class="btn btn-sm btn-warning" title="Editar">
                                             <i class="fas fa-edit"></i>
                                         </a>
                                         <button type="button" class="btn btn-sm btn-danger" title="Eliminar" data-bs-toggle="modal" data-bs-target="#deleteModal{{ supervisor.id }}">
@@ -94,10 +93,12 @@
                                             </div>
                                             <div class="modal-body">
                                                 ¿Estás seguro de que quieres eliminar al supervisor <strong>{{ supervisor.name }} {{ supervisor.apellido }}</strong>?
+                                                Esta acción es irreversible.
                                             </div>
                                             <div class="modal-footer">
                                                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                                                <form method="POST" action="#"> <button type="submit" class="btn btn-danger">Eliminar</button>
+                                                <form method="POST" action="{{ url_for('delete_supervisor', id=supervisor.id) }}">
+                                                    <button type="submit" class="btn btn-danger">Eliminar</button>
                                                 </form>
                                             </div>
                                         </div>

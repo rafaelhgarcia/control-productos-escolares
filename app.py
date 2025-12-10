@@ -40,7 +40,7 @@ def load_user(user_id):
     return db.session.get(User, int(user_id))
 
 # =========================================================================
-# 2. DEFINICIÓN DE MODELOS (Corregido y Unificado)
+# 2. DEFINICIÓN DE MODELOS
 # =========================================================================
 
 class User(UserMixin, db.Model):
@@ -68,13 +68,14 @@ class Bodega(db.Model):
     name = db.Column(db.String(100), nullable=False, unique=True)
     location = db.Column(db.String(200), nullable=True)
 
-# CLASE SUPERVISOR (CORREGIDA con Apellido y Email)
+# CLASE SUPERVISOR (CORREGIDA)
 class Supervisor(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False)
-    apellido = db.Column(db.String(100), nullable=False) # <--- CAMPO AGREGADO
-    email = db.Column(db.String(120), unique=True, nullable=False) # <--- CAMPO AGREGADO
+    apellido = db.Column(db.String(100), nullable=False) 
+    email = db.Column(db.String(120), unique=True, nullable=False) 
     qr_code_data = db.Column(db.String(255), unique=True, nullable=True)
+    # Se omite 'created_at' para coincidir con la plantilla supervisores.html (Solución 2)
 
 class Escuela(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -125,6 +126,8 @@ def dashboard():
 # -------------------------------------------------------------------------
 # RUTAS DE BODEGAS
 # -------------------------------------------------------------------------
+
+# (Tus rutas de Bodegas existentes...)
 
 @app.route('/bodegas')
 @login_required
@@ -208,6 +211,8 @@ def delete_bodega(id):
 # RUTAS DE PRODUCTOS
 # -------------------------------------------------------------------------
 
+# (Tus rutas de Productos existentes...)
+
 @app.route('/productos')
 @login_required
 def list_products():
@@ -249,7 +254,7 @@ def redirect_to_add_product():
 @app.route('/product/qr/<code>')
 @login_required
 def generate_qr(code):
-    # Lógica para generar QR
+    # Lógica para generar QR (Mantenida por si necesitas la ruta específica de producto)
     qr = qrcode.QRCode(version=1, error_correction=qrcode.constants.ERROR_CORRECT_L, box_size=10, border=4)
     qr.add_data(code)
     qr.make(fit=True)
@@ -258,10 +263,11 @@ def generate_qr(code):
     img.save(buffer, format="PNG")
     qr_base64 = base64.b64encode(buffer.getvalue()).decode()
     product = Product.query.filter_by(code=code).first_or_404()
-    return render_template('qr_code.html', qr_base64=qr_base64, product=product)
+    return render_template('qr_code.html', qr_base64=qr_base64, item=product, item_type='Producto')
+
 
 # -------------------------------------------------------------------------
-# RUTAS DE SUPERVISORES (Lógica POST CORREGIDA)
+# RUTAS DE SUPERVISORES (COMPLETO: CRUD + QR)
 # -------------------------------------------------------------------------
 
 @app.route('/supervisores')
@@ -274,21 +280,17 @@ def list_supervisores():
 @login_required
 def create_supervisor():
     if request.method == 'POST':
-        # 1. OBTENER TODOS LOS DATOS REQUERIDOS DEL FORMULARIO
         name = request.form.get('name')
-        apellido = request.form.get('apellido') # <--- CORREGIDO
-        email = request.form.get('email')     # <--- CORREGIDO
+        apellido = request.form.get('apellido')
+        email = request.form.get('email')
         
-        # 2. Validación de campos obligatorios
         if not name or not apellido or not email:
             flash('Todos los campos (Nombre, Apellido, Email) son obligatorios.', 'error')
-            # Renderiza la plantilla nuevamente, pasando los valores para no perderlos
             return render_template('crear_supervisor.html', name=name, apellido=apellido, email=email)
 
-        # 3. Generar el QR Data 
+        # Generar el QR Data 
         qr_data = f"Supervisor:{name}-{apellido}:{email}-{datetime.now().timestamp()}"
         
-        # 4. Crear el objeto con todos los campos
         new_supervisor = Supervisor(
             name=name, 
             apellido=apellido,  
@@ -300,11 +302,10 @@ def create_supervisor():
             db.session.add(new_supervisor)
             db.session.commit()
             flash('Supervisor creado exitosamente.', 'success')
-            return redirect(url_for('list_supervisores')) # REDIRECCIÓN DE ÉXITO 
+            return redirect(url_for('list_supervisores'))
             
         except IntegrityError:
             db.session.rollback()
-            # Posiblemente por email duplicado o QR
             flash('Error: Ya existe un supervisor con ese Email o datos duplicados.', 'error')
             
         except SQLAlchemyError as e:
@@ -313,9 +314,94 @@ def create_supervisor():
             
     return render_template('crear_supervisor.html')
 
+
+# NUEVA RUTA: EDITAR SUPERVISOR (GET y POST)
+@app.route('/supervisores/editar/<int:id>', methods=['GET', 'POST'])
+@login_required
+def edit_supervisor(id):
+    supervisor = db.session.get(Supervisor, id)
+    if not supervisor:
+        flash('Supervisor no encontrado.', 'error')
+        return redirect(url_for('list_supervisores'))
+
+    if request.method == 'POST':
+        name = request.form.get('name')
+        apellido = request.form.get('apellido')
+        email = request.form.get('email')
+        
+        if not name or not apellido or not email:
+            flash('Todos los campos son obligatorios.', 'error')
+            return render_template('editar_supervisor.html', supervisor=supervisor)
+
+        supervisor.name = name
+        supervisor.apellido = apellido
+        supervisor.email = email
+        
+        try:
+            db.session.commit()
+            flash('Supervisor actualizado exitosamente.', 'success')
+            return redirect(url_for('list_supervisores'))
+        except IntegrityError:
+            db.session.rollback()
+            flash('Error: El Email ya está registrado para otro supervisor.', 'error')
+        except SQLAlchemyError as e:
+            db.session.rollback()
+            flash(f'Ocurrió un error inesperado al actualizar: {e}', 'error')
+
+    return render_template('editar_supervisor.html', supervisor=supervisor)
+
+
+# NUEVA RUTA: ELIMINAR SUPERVISOR (POST)
+@app.route('/supervisores/eliminar/<int:id>', methods=['POST'])
+@login_required
+def delete_supervisor(id):
+    supervisor = db.session.get(Supervisor, id)
+    if not supervisor:
+        flash('Supervisor no encontrado.', 'error')
+        return redirect(url_for('list_supervisores'))
+
+    try:
+        db.session.delete(supervisor)
+        db.session.commit()
+        flash(f'Supervisor "{supervisor.name} {supervisor.apellido}" eliminado exitosamente.', 'success')
+    except SQLAlchemyError as e:
+        db.session.rollback()
+        flash(f'Error al eliminar el supervisor: {e}', 'error')
+        
+    return redirect(url_for('list_supervisores'))
+
+
+# NUEVA RUTA: VER QR DEL SUPERVISOR
+@app.route('/supervisores/qr/<int:id>')
+@login_required
+def view_supervisor_qr(id):
+    supervisor = db.session.get(Supervisor, id)
+    if not supervisor:
+        flash('Supervisor no encontrado.', 'error')
+        return redirect(url_for('list_supervisores'))
+
+    # Lógica para generar QR (usando el campo qr_code_data ya guardado)
+    qr_data = supervisor.qr_code_data
+    
+    qr = qrcode.QRCode(version=1, error_correction=qrcode.constants.ERROR_CORRECT_L, box_size=10, border=4)
+    qr.add_data(qr_data)
+    qr.make(fit=True)
+    img = qr.make_image(fill_color="black", back_color="white")
+    
+    # Convertir la imagen a Base64 para incrustarla en HTML
+    buffer = io.BytesIO()
+    img.save(buffer, format="PNG")
+    qr_base64 = base64.b64encode(buffer.getvalue()).decode()
+    
+    # Renderizamos la plantilla genérica QR
+    return render_template('qr_code.html', qr_base64=qr_base64, item=supervisor, item_type='Supervisor')
+
+
 # -------------------------------------------------------------------------
 # RUTAS DE ESCUELAS
 # -------------------------------------------------------------------------
+
+# (Tus rutas de Escuelas existentes...)
 
 @app.route('/escuelas')
 @login_required
@@ -350,6 +436,7 @@ def create_escuela():
 
     return render_template('crear_escuela.html')
 
+
 # -------------------------------------------------------------------------
 # RUTAS ADICIONALES DEL DASHBOARD
 # -------------------------------------------------------------------------
@@ -371,5 +458,6 @@ def pedidos_page():
 
 if __name__ == '__main__':
     with app.app_context():
+        # db.create_all() debe ejecutarse solo cuando la DB no existe o fue eliminada
         db.create_all() 
     app.run(debug=True)

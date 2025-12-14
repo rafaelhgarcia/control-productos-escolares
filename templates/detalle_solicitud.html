@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mt-4">
+    <h2>Detalle de Solicitud #{{ solicitud.id }}</h2>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            {% for category, message in messages %}
+                <div class="alert alert-{{ 'success' if category == 'success' else 'danger' }}" role="alert">
+                    {{ message }}
+                </div>
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
+
+    <div class="row">
+        <div class="col-md-5">
+            <div class="card shadow-sm mb-4">
+                <div class="card-header bg-secondary text-white">
+                    <h5>Información de la Solicitud</h5>
+                </div>
+                <ul class="list-group list-group-flush">
+                    <li class="list-group-item"><strong>Escuela:</strong> {{ solicitud.escuela.name }}</li>
+                    <li class="list-group-item"><strong>Supervisor Asignado:</strong> {{ solicitud.supervisor.name }} {{ solicitud.supervisor.apellido }}</li>
+                    <li class="list-group-item"><strong>Fecha de Solicitud:</strong> {{ solicitud.fecha_solicitud.strftime('%d/%m/%Y %H:%M') }}</li>
+                    {% if solicitud.fecha_aprobacion %}
+                    <li class="list-group-item"><strong>Fecha de Aprobación:</strong> {{ solicitud.fecha_aprobacion.strftime('%d/%m/%Y %H:%M') }}</li>
+                    {% endif %}
+                    <li class="list-group-item">
+                        <strong>Estado Actual:</strong> 
+                        {% if solicitud.estado == 'Aprobada' %}
+                            <span class="badge bg-success fs-6">Aprobada</span>
+                        {% elif solicitud.estado == 'Pendiente' %}
+                            <span class="badge bg-warning text-dark fs-6">Pendiente</span>
+                        {% else %}
+                            <span class="badge bg-danger fs-6">Rechazada</span>
+                        {% endif %}
+                    </li>
+                </ul>
+            </div>
+            
+            {% if solicitud.estado == 'Pendiente' %}
+            <div class="card shadow-sm">
+                <div class="card-header bg-danger text-white">
+                    <h5>Acciones Administrativas</h5>
+                </div>
+                <div class="card-body">
+                    <p class="text-danger">Aprobar un pedido reduce el stock del inventario.</p>
+                    
+                    <form method="POST" action="{{ url_for('aprobar_solicitud', solicitud_id=solicitud.id) }}" onsubmit="return confirm('ATENCIÓN: ¿Confirma que desea APROBAR esta solicitud y reducir el stock?');">
+                        <button type="submit" class="btn btn-success w-100 mb-2">APROBAR PEDIDO Y DESCONTAR STOCK</button>
+                    </form>
+                    
+                    <button class="btn btn-outline-danger w-100" disabled>Rechazar (Pendiente)</button>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+
+        <div class="col-md-7">
+            <h4>Productos Solicitados</h4>
+            {% if detalles %}
+                <table class="table table-bordered table-sm">
+                    <thead class="bg-light">
+                        <tr>
+                            <th>Producto</th>
+                            <th>Cantidad Solicitada</th>
+                            <th>Stock Actual</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for detalle in detalles %}
+                        <tr>
+                            <td>{{ detalle.producto.name }} ({{ detalle.producto.code }})</td>
+                            <td><span class="badge bg-info text-dark fs-6">{{ detalle.cantidad_solicitada }}</span></td>
+                            <td>{{ detalle.producto.stock }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            {% else %}
+                <div class="alert alert-warning">Esta solicitud no tiene detalles de productos.</div>
+            {% endif %}
+        </div>
+    </div>
+    
+    <div class="mt-4">
+        <a href="{{ url_for('pedidos_page') }}" class="btn btn-secondary">← Volver a la Lista de Pedidos</a>
+    </div>
+</div>
+{% endblock %}

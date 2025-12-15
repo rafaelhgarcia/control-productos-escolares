@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mt-5">
+    <div class="card shadow-lg mx-auto" style="max-width: 400px;">
+        <div class="card-header bg-primary text-white text-center">
+            <h4>Código QR - {{ item_type }}</h4>
+        </div>
+        <div class="card-body text-center">
+            {% if item_type == 'Producto' %}
+            <h5 class="card-title">{{ item.name }} ({{ item.code }})</h5>
+            <p class="card-text">Escanea este código para realizar acciones de inventario.</p>
+            {% else %}
+            <h5 class="card-title">{{ item.name }}</h5>
+            <p class="card-text">Escanea este código para realizar un pedido de suministros.</p>
+            {% endif %}
+            
+            <div class="my-4 p-3 border rounded d-inline-block">
+                <img src="data:image/png;base64,{{ qr_base64 }}" alt="Código QR de {{ item.name }}" style="width: 250px; height: 250px;">
+            </div>
+
+            <hr>
+            <a href="javascript:window.print()" class="btn btn-info mt-2">Imprimir QR</a>
+            <a href="{{ url_for('list_products') }}" class="btn btn-outline-secondary mt-2">Volver a Productos</a>
+        </div>
+    </div>
+</div>
+{% endblock %}

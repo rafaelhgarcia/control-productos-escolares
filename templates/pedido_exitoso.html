@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mt-5">
+    <div class="card shadow-lg mx-auto text-center border-success" style="max-width: 500px;">
+        <div class="card-header bg-success text-white">
+            <h3>✅ Solicitud Recibida</h3>
+        </div>
+        <div class="card-body">
+            <h5 class="card-title text-success">¡Gracias por tu pedido!</h5>
+            <p class="card-text">Tu solicitud de suministros (ID **#{{ solicitud_id }}**) ha sido enviada al sistema.</p>
+            <p class="card-text">El supervisor asignado la revisará pronto para su aprobación.</p>
+            <hr>
+            <p class="text-muted small">
+                Este es un mensaje de confirmación pública.
+            </p>
+            <a href="{{ url_for('index') }}" class="btn btn-outline-success mt-3">Volver al inicio (Admin)</a>
+        </div>
+    </div>
+</div>
+{% endblock %}

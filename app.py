@@ -1,11 +1,11 @@
 import os
-from datetime import datetime, timedelta # Se añade timedelta para la lógica de pedidos
+from datetime import datetime, timedelta
 from flask import Flask, render_template, redirect, url_for, flash, request
 from flask_login import UserMixin, LoginManager, login_user, logout_user, current_user, login_required
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import generate_password_hash, check_password_hash
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
-from sqlalchemy import func # Importar func para posibles consultas avanzadas
+from sqlalchemy import func
 
 import qrcode
 import io
@@ -43,7 +43,7 @@ def load_user(user_id):
     return db.session.get(User, int(user_id))
 
 # =========================================================================
-# 2. DEFINICIÓN DE MODELOS (Actualizado con Pedidos y Asignaciones)
+# 2. DEFINICIÓN DE MODELOS
 # =========================================================================
 
 class User(UserMixin, db.Model):
@@ -83,26 +83,24 @@ class Escuela(db.Model):
     name = db.Column(db.String(100), nullable=False)
     qr_code_data = db.Column(db.String(255), unique=True, nullable=True)
 
-# MODELO NUEVO: Relación Supervisor-Escuela
+# Relación Supervisor-Escuela
 class SupervisorEscuela(db.Model):
     __tablename__ = 'supervisor_escuela'
     id = db.Column(db.Integer, primary_key=True)
     supervisor_id = db.Column(db.Integer, db.ForeignKey('supervisor.id'), nullable=False)
     escuela_id = db.Column(db.Integer, db.ForeignKey('escuela.id'), nullable=False)
     
-    # Restricción para unicidad de la asignación
     __table_args__ = (db.UniqueConstraint('supervisor_id', 'escuela_id', name='_supervisor_escuela_uc'),)
 
-    # Relaciones para consultas
     supervisor = db.relationship('Supervisor', backref='asignaciones')
     escuela = db.relationship('Escuela', backref='asignaciones')
 
-# MODELO NUEVO: Solicitud de Pedido
+# Solicitud de Pedido
 class Solicitud(db.Model):
     __tablename__ = 'solicitud'
     id = db.Column(db.Integer, primary_key=True)
     supervisor_id = db.Column(db.Integer, db.ForeignKey('supervisor.id'), nullable=False)
-    escuela_id = db.Column(db.Integer, db.ForeignKey('escuela.id'), nullable=False) # Ahora es obligatorio
+    escuela_id = db.Column(db.Integer, db.ForeignKey('escuela.id'), nullable=False)
     fecha_solicitud = db.Column(db.DateTime, default=datetime.utcnow)
     fecha_aprobacion = db.Column(db.DateTime, nullable=True)
     estado = db.Column(db.String(50), default='Pendiente', nullable=False) # Pendiente, Aprobada, Rechazada
@@ -110,7 +108,7 @@ class Solicitud(db.Model):
     supervisor = db.relationship('Supervisor', backref='solicitudes')
     escuela = db.relationship('Escuela', backref='solicitudes')
 
-# MODELO NUEVO: Detalle del Pedido
+# Detalle del Pedido
 class DetalleSolicitud(db.Model):
     __tablename__ = 'detalle_solicitud'
     id = db.Column(db.Integer, primary_key=True)
@@ -125,7 +123,6 @@ class DetalleSolicitud(db.Model):
 # 3. RUTAS DE ACCESO Y DASHBOARD
 # =========================================================================
 
-# (Tus rutas existentes: index, login, logout, dashboard se mantienen igual)
 @app.route('/')
 def index():
     if current_user.is_authenticated:
@@ -134,7 +131,6 @@ def index():
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
-    # ... (Tu lógica de login) ...
     if current_user.is_authenticated:
         return redirect(url_for('dashboard'))
 
@@ -165,10 +161,8 @@ def dashboard():
 
 
 # -------------------------------------------------------------------------
-# RUTAS DE BODEGAS (CRUD Existente)
+# RUTAS DE BODEGAS (CRUD)
 # -------------------------------------------------------------------------
-# (Tus rutas de Bodegas existentes: list_bodegas, create_bodega, edit_bodega, delete_bodega)
-# ... (Mantener las rutas de Bodega aquí) ...
 
 @app.route('/bodegas')
 @login_required
@@ -249,10 +243,8 @@ def delete_bodega(id):
 
 
 # -------------------------------------------------------------------------
-# RUTAS DE PRODUCTOS (CRUD Existente)
+# RUTAS DE PRODUCTOS (CRUD)
 # -------------------------------------------------------------------------
-# (Tus rutas de Productos existentes: list_products, add_product, generate_qr, etc.)
-# ... (Mantener las rutas de Productos aquí) ...
 
 @app.route('/productos')
 @login_required
@@ -295,7 +287,6 @@ def redirect_to_add_product():
 @app.route('/product/qr/<code>')
 @login_required
 def generate_qr(code):
-    # Lógica para generar QR (Mantenida por si necesitas la ruta específica de producto)
     qr = qrcode.QRCode(version=1, error_correction=qrcode.constants.ERROR_CORRECT_L, box_size=10, border=4)
     qr.add_data(code)
     qr.make(fit=True)
@@ -310,7 +301,6 @@ def generate_qr(code):
 # -------------------------------------------------------------------------
 # RUTAS DE SUPERVISORES (CRUD + QR Corregido)
 # -------------------------------------------------------------------------
-# (Tus rutas de Supervisor existentes, con la corrección en create_supervisor y view_supervisor_qr)
 
 @app.route('/supervisores')
 @login_required
@@ -330,20 +320,20 @@ def create_supervisor():
             flash('Todos los campos (Nombre, Apellido, Email) son obligatorios.', 'error')
             return render_template('crear_supervisor.html', name=name, apellido=apellido, email=email)
 
-        # Generar el QR Data (CORRECCIÓN: Usar una cadena más corta y única, el email)
+        # Generar el QR Data usando el email como clave única
         qr_data = f"SUPERVISOR_EMAIL:{email}"
         
         new_supervisor = Supervisor(
             name=name, 
-            apellido=apellido,  
-            email=email,        
+            apellido=apellido, 
+            email=email,     
             qr_code_data=qr_data
         )
         
         try:
             db.session.add(new_supervisor)
             db.session.commit()
-            flash('Supervisor creado exitosamente.', 'success')
+            flash('Supervisor creado exitosamente. QR Data generado.', 'success')
             return redirect(url_for('list_supervisores'))
             
         except IntegrityError:
@@ -355,7 +345,6 @@ def create_supervisor():
             flash(f'Ocurrió un error inesperado al guardar el supervisor: {e}', 'error')
             
     return render_template('crear_supervisor.html')
-
 
 @app.route('/supervisores/qr/<int:id>')
 @login_required
@@ -369,17 +358,22 @@ def view_supervisor_qr(id):
     asignaciones = SupervisorEscuela.query.filter_by(supervisor_id=id).all()
     escuela_ids = [a.escuela_id for a in asignaciones]
     
-    # 2. Obtener los pedidos de las escuelas ASIGNADAS (filtrado para que solo vea los suyos)
+    # 2. Obtener los pedidos de las escuelas ASIGNADAS
     if escuela_ids:
         solicitudes = Solicitud.query.filter(
             Solicitud.escuela_id.in_(escuela_ids)
         ).order_by(Solicitud.fecha_solicitud.desc()).all()
     else:
         solicitudes = []
-        flash('Este supervisor no tiene escuelas asignadas, no hay pedidos que mostrar.', 'warning')
+        flash('Este supervisor no tiene escuelas asignadas. Por favor, asigne una escuela.', 'warning')
         
     # 3. Lógica para generar QR (usando el campo qr_code_data)
     qr_data = supervisor.qr_code_data
+    
+    # Manejar caso si el QR data es None (supervisores antiguos)
+    if not qr_data:
+        flash('El QR del supervisor estaba vacío. Intente editar y guardar para regenerarlo permanentemente.', 'warning')
+        qr_data = f"SUPERVISOR_EMAIL:{supervisor.email}" 
     
     qr = qrcode.QRCode(version=1, error_correction=qrcode.constants.ERROR_CORRECT_L, box_size=10, border=4)
     qr.add_data(qr_data)
@@ -396,7 +390,6 @@ def view_supervisor_qr(id):
                            supervisor=supervisor, 
                            solicitudes=solicitudes) 
 
-# (Rutas de editar y eliminar supervisor se mantienen igual)
 @app.route('/supervisores/editar/<int:id>', methods=['GET', 'POST'])
 @login_required
 def edit_supervisor(id):
@@ -416,7 +409,13 @@ def edit_supervisor(id):
 
         supervisor.name = name
         supervisor.apellido = apellido
-        supervisor.email = email
+
+        # Lógica de regeneración de QR si cambia el email o si el campo estaba vacío
+        if supervisor.email != email or not supervisor.qr_code_data:
+            supervisor.email = email
+            supervisor.qr_code_data = f"SUPERVISOR_EMAIL:{email}"
+        else:
+            supervisor.email = email
         
         try:
             db.session.commit()
@@ -430,7 +429,6 @@ def edit_supervisor(id):
             flash(f'Ocurrió un error inesperado al actualizar: {e}', 'error')
 
     return render_template('editar_supervisor.html', supervisor=supervisor)
-
 
 @app.route('/supervisores/eliminar/<int:id>', methods=['POST'])
 @login_required
@@ -452,9 +450,8 @@ def delete_supervisor(id):
 
 
 # -------------------------------------------------------------------------
-# RUTAS DE ESCUELAS (CRUD Existente)
+# RUTAS DE ESCUELAS (CRUD)
 # -------------------------------------------------------------------------
-# (Tus rutas de Escuelas existentes: list_escuelas, create_escuela)
 
 @app.route('/escuelas')
 @login_required
@@ -472,7 +469,7 @@ def create_escuela():
             flash('El nombre de la escuela es obligatorio.', 'error')
             return render_template('crear_escuela.html')
 
-        # Usar ID o nombre en el QR para que la ruta de pedido funcione: /pedido/escuela/<id>
+        # Usar el nombre y un timestamp para un QR Data único
         qr_data = f"ESCUELA_NAME:{name}-{datetime.now().timestamp()}"
         
         new_escuela = Escuela(name=name, qr_code_data=qr_data)
@@ -612,7 +609,6 @@ def hacer_pedido_escuela(escuela_id):
                 return render_template('hacer_pedido.html', escuela=escuela, productos=productos)
                 
             db.session.commit()
-            flash('¡Pedido realizado exitosamente! Esperando aprobación del administrador.', 'success')
             return redirect(url_for('pedido_exitoso', solicitud_id=nueva_solicitud.id))
             
         except SQLAlchemyError as e:
@@ -624,6 +620,7 @@ def hacer_pedido_escuela(escuela_id):
 
 @app.route('/pedido/exitoso/<int:solicitud_id>')
 def pedido_exitoso(solicitud_id):
+    # RUTA PÚBLICA: Muestra un mensaje de confirmación
     return render_template('pedido_exitoso.html', solicitud_id=solicitud_id)
 
 
@@ -631,7 +628,6 @@ def pedido_exitoso(solicitud_id):
 # RUTAS DE ASIGNACIÓN (Supervisor-Escuela)
 # -------------------------------------------------------------------------
 
-# NUEVA RUTA: Administrar asignaciones
 @app.route('/asignaciones', methods=['GET', 'POST'])
 @login_required
 def administrar_asignaciones():
@@ -702,7 +698,6 @@ def reportes_page():
 
 if __name__ == '__main__':
     with app.app_context():
-        # Esto creará las nuevas tablas (Solicitud, DetalleSolicitud, SupervisorEscuela)
-        # si no existen en la base de datos de Render.
-        db.create_all() 
+        # Crear la base de datos y el usuario admin (si no existe, usa tu script)
+        db.create_all()
     app.run(debug=True)

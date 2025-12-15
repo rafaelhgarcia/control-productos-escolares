@@ -1,72 +1,83 @@
 {% extends "base.html" %}
 
+{% block title %}Gestión de Asignaciones{% endblock %}
+
 {% block content %}
-<div class="container mt-4">
-    <h2>📋 Asignación de Escuelas a Supervisores</h2>
+<div class="container mt-5">
+    <h2 class="mb-4">Gestión de Asignaciones Supervisor-Escuela</h2>
 
-    {% with messages = get_flashed_messages(with_categories=true) %}
-        {% if messages %}
-            {% for category, message in messages %}
-                <div class="alert alert-{{ 'success' if category == 'success' else 'danger' }}" role="alert">
-                    {{ message }}
-                </div>
-            {% endfor %}
-        {% endif %}
-    {% endwith %}
-
-    <div class="row">
-        <div class="col-md-5">
-            <div class="card shadow-sm mb-4">
-                <div class="card-header bg-primary text-white">
-                    <h5>Crear Nueva Asignación</h5>
-                </div>
-                <div class="card-body">
-                    <form method="POST" action="{{ url_for('administrar_asignaciones') }}">
-                        <div class="form-group mb-3">
-                            <label for="supervisor_id">Supervisor:</label>
-                            <select class="form-control" id="supervisor_id" name="supervisor_id" required>
-                                <option value="">Seleccione un Supervisor</option>
-                                {% for supervisor in supervisores %}
-                                    <option value="{{ supervisor.id }}">{{ supervisor.name }} {{ supervisor.apellido }} ({{ supervisor.email }})</option>
-                                {% endfor %}
-                            </select>
-                        </div>
-                        <div class="form-group mb-3">
-                            <label for="escuela_id">Escuela:</label>
-                            <select class="form-control" id="escuela_id" name="escuela_id" required>
-                                <option value="">Seleccione una Escuela</option>
-                                {% for escuela in escuelas %}
-                                    <option value="{{ escuela.id }}">{{ escuela.name }}</option>
-                                {% endfor %}
-                            </select>
-                        </div>
-                        <button type="submit" class="btn btn-success w-100">Asignar Escuela</button>
-                    </form>
-                </div>
-            </div>
+    <div class="card shadow mb-5">
+        <div class="card-header bg-success text-white">
+            <h5>Asignar Supervisor a Escuela</h5>
         </div>
+        <div class="card-body">
+            <form method="POST" action="{{ url_for('administrar_asignaciones') }}">
+                <div class="row">
+                    <div class="col-md-5 mb-3">
+                        <label for="supervisor_id" class="form-label">Supervisor</label>
+                        <select class="form-select" id="supervisor_id" name="supervisor_id" required>
+                            <option value="" disabled selected>Selecciona un Supervisor</option>
+                            {% for supervisor in supervisores %}
+                            <option value="{{ supervisor.id }}">{{ supervisor.name }} {{ supervisor.apellido }} ({{ supervisor.email }})</option>
+                            {% endfor %}
+                        </select>
+                    </div>
 
-        <div class="col-md-7">
-            <h4>Asignaciones Actuales</h4>
-            {% if asignaciones %}
-                <ul class="list-group">
-                    {% for asignacion in asignaciones %}
-                        <li class="list-group-item d-flex justify-content-between align-items-center">
-                            <div>
-                                <strong>Supervisor:</strong> {{ asignacion.supervisor.name }} {{ asignacion.supervisor.apellido }}
-                                <br>
-                                <strong>Escuela:</strong> {{ asignacion.escuela.name }}
-                            </div>
-                            <form method="POST" action="{{ url_for('eliminar_asignacion', id=asignacion.id) }}" onsubmit="return confirm('¿Está seguro de que desea eliminar esta asignación?');">
-                                <button type="submit" class="btn btn-sm btn-danger">Eliminar</button>
-                            </form>
-                        </li>
-                    {% endfor %}
-                </ul>
-            {% else %}
-                <div class="alert alert-info">No hay asignaciones de escuela a supervisor registradas.</div>
+                    <div class="col-md-5 mb-3">
+                        <label for="escuela_id" class="form-label">Escuela</label>
+                        <select class="form-select" id="escuela_id" name="escuela_id" required>
+                            <option value="" disabled selected>Selecciona una Escuela</option>
+                            {% for escuela in escuelas %}
+                            <option value="{{ escuela.id }}">{{ escuela.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div class="col-md-2 d-flex align-items-end mb-3">
+                        <button type="submit" class="btn btn-success w-100">Asignar</button>
+                    </div>
+                </div>
+            </form>
+            {% if not supervisores or not escuelas %}
+            <div class="alert alert-warning mt-3">
+                Necesitas crear al menos un Supervisor y una Escuela antes de poder realizar asignaciones.
+            </div>
             {% endif %}
         </div>
+    </div>
+
+    <h4>Asignaciones Actuales ({{ asignaciones | length }} en total)</h4>
+    <div class="table-responsive">
+        {% if asignaciones %}
+        <table class="table table-striped table-hover align-middle">
+            <thead class="table-dark">
+                <tr>
+                    <th scope="col">ID Asignación</th>
+                    <th scope="col">Supervisor Asignado</th>
+                    <th scope="col">Escuela Vinculada</th>
+                    <th scope="col">Acciones</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for asignacion in asignaciones %}
+                <tr>
+                    <td>{{ asignacion.id }}</td>
+                    <td>{{ asignacion.supervisor.name }} {{ asignacion.supervisor.apellido }}</td>
+                    <td>{{ asignacion.escuela.name }}</td>
+                    <td>
+                        <form action="{{ url_for('eliminar_asignacion', id=asignacion.id) }}" method="POST" onsubmit="return confirm('¿Estás seguro de que quieres eliminar esta asignación?');" style="display:inline;">
+                            <button type="submit" class="btn btn-sm btn-danger">Eliminar</button>
+                        </form>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <div class="alert alert-info">
+            No hay asignaciones Supervisor-Escuela registradas todavía.
+        </div>
+        {% endif %}
     </div>
 </div>
 {% endblock %}
